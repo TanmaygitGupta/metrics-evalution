@@ -1,0 +1,275 @@
+"""
+duc_simulate.py
+---------------
+Generates a realistic simulated DUC 2004-style dataset for evaluation purposes.
+Each sample contains:
+  - id: unique identifier
+  - reference: human-written reference summary
+  - system: machine-generated system summary
+
+The dataset includes diverse cases:
+  - Good paraphrasing (semantic match, low lexical overlap)
+  - Exact overlap (high ROUGE, high BERTScore)
+  - Hallucination/noise (low scores across all metrics)
+  - Partial overlap (mixed scores)
+"""
+
+import json
+import random
+from pathlib import Path
+
+# Reproducibility
+random.seed(42)
+
+
+DUC_SAMPLES = [
+    {
+        "id": "DUC2004_001",
+        "reference": (
+            "The United States launched military strikes against Iraq in March 2003, "
+            "marking the beginning of the Iraq War. Coalition forces quickly overwhelmed "
+            "Iraqi defenses and captured Baghdad within weeks."
+        ),
+        "system": (
+            "American-led coalition forces initiated an invasion of Iraq in 2003, "
+            "rapidly defeating the Iraqi military and seizing control of the capital city Baghdad."
+        ),
+    },
+    {
+        "id": "DUC2004_002",
+        "reference": (
+            "Global climate change is causing rising sea levels, more frequent extreme weather events, "
+            "and significant biodiversity loss, threatening ecosystems worldwide."
+        ),
+        "system": (
+            "Rising sea levels, increased frequency of extreme weather, and loss of biodiversity are "
+            "among the primary consequences of global climate change affecting Earth's ecosystems."
+        ),
+    },
+    {
+        "id": "DUC2004_003",
+        "reference": (
+            "The Human Genome Project was completed in 2003, providing a comprehensive map of all "
+            "human genes and revolutionizing medicine and biological research."
+        ),
+        "system": (
+            "Scientists finished mapping the complete human genetic code in 2003, "
+            "a milestone known as the Human Genome Project that transformed biological sciences."
+        ),
+    },
+    {
+        "id": "DUC2004_004",
+        "reference": (
+            "The September 11, 2001 terrorist attacks led to the deaths of nearly 3,000 people "
+            "and fundamentally altered U.S. foreign policy, leading to wars in Afghanistan and Iraq."
+        ),
+        "system": (
+            "Nearly three thousand individuals perished in the 9/11 attacks, which dramatically "
+            "reshaped American foreign policy and triggered military campaigns in Afghanistan and Iraq."
+        ),
+    },
+    {
+        "id": "DUC2004_005",
+        "reference": (
+            "The euro was introduced as a common currency across the European Union in 2002, "
+            "replacing national currencies and facilitating cross-border trade."
+        ),
+        "system": (
+            "The euro became the unified currency of the European Union in 2002, "
+            "superseding various national currencies and simplifying economic transactions."
+        ),
+    },
+    {
+        "id": "DUC2004_006",
+        "reference": (
+            "Space Shuttle Columbia disintegrated upon reentry into Earth's atmosphere on February 1, 2003, "
+            "killing all seven crew members aboard."
+        ),
+        "system": (
+            "The Space Shuttle Columbia broke apart during reentry on February 1, 2003, "
+            "resulting in the deaths of the seven astronauts on board."
+        ),
+    },
+    {
+        "id": "DUC2004_007",
+        "reference": (
+            "The SARS epidemic spread across Asia and North America in 2003, infecting thousands "
+            "and prompting global health emergency responses."
+        ),
+        "system": (
+            "In 2003, the Severe Acute Respiratory Syndrome outbreak swept through Asian nations "
+            "and parts of North America, affecting thousands and triggering international health alerts."
+        ),
+    },
+    {
+        "id": "DUC2004_008",
+        "reference": (
+            "North Korea announced its withdrawal from the Nuclear Non-Proliferation Treaty in January 2003, "
+            "escalating international concerns about nuclear proliferation."
+        ),
+        "system": (
+            "Pyongyang declared it was pulling out of the nuclear non-proliferation agreement early in 2003, "
+            "raising global alarm over the spread of nuclear weapons."
+        ),
+    },
+    {
+        "id": "DUC2004_009",
+        "reference": (
+            "The U.S. economy experienced a mild recession in 2001 following the dot-com bubble burst "
+            "and was further impacted by the September 11 attacks."
+        ),
+        "system": (
+            "A modest economic downturn hit the United States in 2001 after technology stocks collapsed "
+            "and the 9/11 terrorist attacks dealt additional blows to the financial system."
+        ),
+    },
+    {
+        "id": "DUC2004_010",
+        "reference": (
+            "China's economy grew at an unprecedented rate in the early 2000s, becoming the world's "
+            "factory and lifting millions out of poverty through export-led growth."
+        ),
+        "system": (
+            "In the early 2000s, China experienced extraordinary economic expansion, transforming into "
+            "a global manufacturing hub and dramatically reducing domestic poverty levels."
+        ),
+    },
+    # --- Paraphrase cases (semantic match, low lexical overlap) ---
+    {
+        "id": "DUC2004_011",
+        "reference": (
+            "Scientists discovered that regular physical exercise significantly reduces the risk of "
+            "cardiovascular disease and extends life expectancy."
+        ),
+        "system": (
+            "Research has shown that consistently working out lowers the chances of heart-related illnesses "
+            "and contributes to a longer lifespan."
+        ),
+    },
+    {
+        "id": "DUC2004_012",
+        "reference": (
+            "The European Space Agency launched its Mars Express mission in June 2003, aimed at "
+            "studying the Martian atmosphere and surface."
+        ),
+        "system": (
+            "ESA sent its Mars exploration spacecraft into orbit in mid-2003, with objectives including "
+            "investigation of the red planet's air and terrain."
+        ),
+    },
+    # --- Low quality / hallucinated system summaries ---
+    {
+        "id": "DUC2004_013",
+        "reference": (
+            "The United Nations Security Council debated the legitimacy of the Iraq invasion, "
+            "with France and Russia opposing military action without further inspections."
+        ),
+        "system": (
+            "Stock markets around the world surged to record highs in early 2003 as investor confidence "
+            "reached new peaks following strong quarterly earnings reports."
+        ),
+    },
+    {
+        "id": "DUC2004_014",
+        "reference": (
+            "Obesity rates in developed nations have been rising steadily since the 1980s, "
+            "driven by sedentary lifestyles and high-calorie diets."
+        ),
+        "system": (
+            "Technological advancements in renewable energy led to a sharp decline in global oil prices "
+            "throughout the 1990s and early 2000s."
+        ),
+    },
+    # --- Exact or near-exact overlap (high ROUGE, high BERTScore) ---
+    {
+        "id": "DUC2004_015",
+        "reference": (
+            "The Hubble Space Telescope captured stunning images of distant galaxies, "
+            "providing unprecedented views of the early universe."
+        ),
+        "system": (
+            "The Hubble Space Telescope captured stunning images of distant galaxies, "
+            "providing unprecedented views of the early universe."
+        ),
+    },
+    {
+        "id": "DUC2004_016",
+        "reference": (
+            "Amazon expanded its logistics network significantly in the early 2000s, "
+            "enabling faster delivery and growing its customer base dramatically."
+        ),
+        "system": (
+            "Amazon greatly expanded its logistics network in the early 2000s, "
+            "allowing it to deliver packages more quickly and substantially grow its customer base."
+        ),
+    },
+    # --- Partial overlap cases ---
+    {
+        "id": "DUC2004_017",
+        "reference": (
+            "The Kyoto Protocol, adopted in 1997, required developed nations to reduce greenhouse gas "
+            "emissions to combat global warming. The United States refused to ratify the agreement."
+        ),
+        "system": (
+            "Many industrialized countries agreed to cut carbon emissions under the Kyoto Protocol, "
+            "though participation varied across nations."
+        ),
+    },
+    {
+        "id": "DUC2004_018",
+        "reference": (
+            "Apple introduced the iTunes Music Store in April 2003, allowing users to purchase "
+            "individual songs for 99 cents, transforming the music industry."
+        ),
+        "system": (
+            "Apple launched a digital music platform in 2003 that offered single track purchases, "
+            "which fundamentally changed how consumers bought music."
+        ),
+    },
+    {
+        "id": "DUC2004_019",
+        "reference": (
+            "The U.S. Department of Homeland Security was established in 2002 in response to the "
+            "September 11 attacks, consolidating 22 federal agencies."
+        ),
+        "system": (
+            "Following the 2001 terrorist attacks, a new cabinet-level department was created in 2002 "
+            "to coordinate national security efforts across multiple government bodies."
+        ),
+    },
+    {
+        "id": "DUC2004_020",
+        "reference": (
+            "The Human Immunodeficiency Virus (HIV) pandemic continued to ravage sub-Saharan Africa "
+            "in the early 2000s, with millions dying from AIDS-related illnesses annually."
+        ),
+        "system": (
+            "Sub-Saharan Africa remained the epicenter of the HIV/AIDS crisis in the early 2000s, "
+            "seeing millions of deaths each year from the disease and related complications."
+        ),
+    },
+]
+
+
+def generate_dataset(output_path: str = "data/duc_2004_simulated.json") -> list[dict]:
+    """
+    Generate and save the simulated DUC 2004 dataset.
+
+    Args:
+        output_path: Path to save the JSON file.
+
+    Returns:
+        List of dataset samples.
+    """
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(DUC_SAMPLES, f, indent=2, ensure_ascii=False)
+
+    print(f"[INFO] Dataset saved to '{path}' with {len(DUC_SAMPLES)} samples.")
+    return DUC_SAMPLES
+
+
+if __name__ == "__main__":
+    generate_dataset()
